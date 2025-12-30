@@ -209,7 +209,5 @@ __marimo__/
 
 __pycache__/
 .env
-data/processed/
-data/raw_pdfs/
 .vscode/
 .cache/
