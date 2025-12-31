@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from app.core.exception import CustomException
+from app.core.logger import logger
 from app.retrieval.retriever import retrieve_topk
 from app.retrieval.rag_pipeline import rag_answer
 
@@ -6,11 +8,24 @@ router = APIRouter()
 
 
 @router.post("/query")
-async def query_rag(request: dict):
-    question = request.get("query")
+async def ask_question(payload: dict):
+    try:
+        question = payload.get("query")
 
-    chunks = retrieve_topk(question, top_k=5)
+        if not question:
+            raise HTTPException(status_code=400, detail="Query missing")
 
-    result = rag_answer(question, chunks)
+        logger.info(f"User query: {question}")
 
-    return result
+        chunks = retrieve_topk(question, top_k=5)
+
+        result = rag_answer(question, chunks)
+
+        return result
+
+    except HTTPException:
+        # re-raise known HTTP errors
+        raise
+    except Exception as e:
+        logger.exception("Query failed")
+        raise HTTPException(status_code=500, detail=str(e))

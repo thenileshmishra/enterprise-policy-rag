@@ -19,3 +19,8 @@ class Retriever:
     def retrive(self, query:str, top_k: int = 5):
         query_embedding = self.embedder.embed_single(query)
         return self.store.search(query_embedding, top_k=top_k)
+
+
+def retrieve_topk(query: str, top_k: int = 5):
+    """Module-level helper used by the API to return top-k chunks for a query."""
+    return Retriever().retrive(query, top_k=top_k)

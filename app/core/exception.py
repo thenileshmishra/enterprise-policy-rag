@@ -2,7 +2,10 @@ import sys
 from .logger import logger
 
 
-def error_message_detail(error, error_detail:sys):
+def error_message_detail(error, error_detail=None):
+    # allow callers to omit error_detail and default to the sys module
+    if error_detail is None:
+        error_detail = sys
     _,_, exc_tb = error_detail.exc_info()
 
     if exc_tb is None:
@@ -23,7 +26,7 @@ def error_message_detail(error, error_detail:sys):
     return error_message
 
 class CustomException(Exception):
-    def __init__(self, error_message, error_detail:sys):
+    def __init__(self, error_message, error_detail=None):
         
         self.error_message = error_message_detail(error_message, error_detail=error_detail)
         super().__init__(self.error_message)

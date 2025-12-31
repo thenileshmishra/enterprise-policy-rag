@@ -16,11 +16,15 @@ HF_API_KEY = os.getenv("HF_API_KEY")
 
 class LLMClient:
     def __init__(self, api_url: str = HF_API_URL, api_key: Optional[str] = HF_API_KEY):
-        if not api_key:
-            raise CustomException("HF_API_KEY not configured")
-
+        """Initialize client without raising at import time when HF_API_KEY is missing.
+        The client will raise a `CustomException` when `generate` is called without a configured key.
+        """
         self.api_url = api_url
-        self.headers = {"Authorization": f"Bearer {api_key}"}
+        if api_key:
+            self.headers = {"Authorization": f"Bearer {api_key}"}
+        else:
+            self.headers = None
+            logger.warning("HF_API_KEY not configured; LLMClient will be inactive until configured")
 
     def generate(self, prompt: str, max_tokens: int = 512) -> str:
         try:
@@ -31,6 +35,9 @@ class LLMClient:
                     "temperature": 0.2,
                 }
             }
+
+            if not self.headers:
+                raise CustomException("HF_API_KEY not configured")
 
             res = requests.post(self.api_url, headers=self.headers, json=payload, timeout=60)
 
