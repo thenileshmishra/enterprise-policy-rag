@@ -43,8 +43,23 @@ class VectorStoreFAISS:
             logger.info("FAISS index + metadata saved")
     
     def load(self):
+        # If S3 is configured, try to download index from object storage first
+        s3_bucket = os.getenv("S3_BUCKET")
+        s3_index_key = os.getenv("S3_INDEX_KEY", "faiss.index")
+        s3_meta_key = os.getenv("S3_META_KEY", "metadata.json")
+        if s3_bucket:
+            try:
+                from app.retrieval.storage import download_index
+
+                ok = download_index(s3_bucket, s3_index_key, s3_meta_key, self.index_path, self.meta_path)
+                if not ok:
+                    logger.warning("S3 index download failed; falling back to local index if available")
+            except Exception:
+                logger.exception("S3 index helpers failed; continuing to local index check")
+
         if not os.path.exists(self.index_path):
-            raise CustomException("FAISS index loaded succesfully")
+            raise CustomException("FAISS index missing — please upload a PDF or configure S3 index to download")
+
         self.index = faiss.read_index(self.index_path)
         with open(self.meta_path, "r") as f:
             self.metadata = json.load(f)

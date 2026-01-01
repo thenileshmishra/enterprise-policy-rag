@@ -64,6 +64,37 @@ streamlit run ui/streamlit_app.py
 pytest tests/
 ```
 
+## Docker
+
+Build and run locally with Docker:
+
+```bash
+# build
+docker build -t enterprise-policy-rag:local .
+# run
+docker run -p 8000:8000 -e HF_API_KEY=your_hf_key -v $(pwd)/data/processed:/data/processed enterprise-policy-rag:local
+```
+
+## Deploy to Render
+
+Add the following GitHub secrets:
+- `RENDER_API_KEY` (Render service API key)
+- `RENDER_SERVICE_ID` (Render service ID)
+
+You can either let GitHub Actions push the image to GHCR and trigger a Render deploy (configured in `.github/workflows/ci-cd.yml`), or connect Render directly to the GitHub repo and use the provided `.render.yaml` configuration.
+
+## FAISS index persistence
+
+You can persist the FAISS index in one of two ways:
+
+1. Use Render / provider persistent disk (if available) and mount `/data/processed` as a volume.
+2. Use S3/DigitalOcean Spaces by setting:
+
+- `S3_BUCKET`, `S3_INDEX_KEY`, `S3_META_KEY`
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `S3_ENDPOINT` (for Spaces)
+
+On startup the app will try to download the index from S3 if `S3_BUCKET` is configured; otherwise it will use local `/data/processed/faiss.index`.
+
 **API Endpoints**
 
 - `POST /api/upload` - Upload and index PDF documents
