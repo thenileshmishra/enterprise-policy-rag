@@ -1,178 +1,120 @@
-# Enterprise Policy & Compliance Assistant (RAG)
+# Enterprise Policy RAG
 
-A **production-oriented foundation for an enterprise Retrieval-Augmented Generation (RAG) system**, focused on **robust document ingestion, preprocessing, and chunking of policy and compliance documents**.
+Production-grade Retrieval-Augmented Generation system for enterprise policy documents with evaluation and monitoring.
 
-This project addresses the **most critical and error-prone part of RAG systems**: converting unstructured enterprise PDFs into **clean, structured, metadata-rich text units** that are reliable for downstream semantic retrieval and AI-based reasoning.
+## Overview
 
----
+Enterprise policies and compliance documents are difficult to search and reason over. This system enables natural language querying of policy documents using semantic search and LLM-powered answer generation with citations.
 
-##  Project Objective
+Built with production-ready evaluation metrics, hallucination detection, and performance monitoring to ensure reliable, grounded responses for compliance-critical use cases.
 
-Enterprise policies, HR handbooks, and compliance documents are typically stored as long, unstructured PDFs.
-These documents are difficult to search, audit, or reason over programmatically.
+## Tech Stack
 
-This system lays the **core data pipeline** required to:
+**Backend & API**
 
-* Parse complex enterprise PDFs
-* Normalize noisy text
-* Split content into semantically meaningful chunks
-* Preserve metadata for traceability and citations
-* Prepare documents for vector-based retrieval and LLM grounding
+- FastAPI for REST endpoints
+- Python 3.11+ with Pydantic for type safety
 
----
+**RAG Pipeline**
 
-## ✅ Implemented Capabilities
+- PyMuPDF for PDF parsing and text extraction
+- LangChain for text splitting and chunking
+- Sentence Transformers for embeddings
+- FAISS and ChromaDB for vector storage
+- LLM integration for answer generation
 
-### 📄 PDF Document Ingestion
+**Evaluation & Monitoring**
 
-* Supports ingestion of enterprise PDFs (HR, policy, compliance)
-* Handles multi-page documents
-* Robust text extraction resilient to:
+- Custom retrieval evaluation metrics
+- Answer quality assessment
+- Hallucination detection
+- Latency tracking and performance monitoring
 
-  * Headers and footers
-  * Page breaks
-  * Formatting noise
+**Frontend & Deployment**
 
-### 🧹 Text Cleaning & Normalization
+- Streamlit UI for document upload and querying
+- Loguru for structured logging
+- Pytest for testing
 
-* Removes non-informative artifacts
-* Normalizes whitespace and line breaks
-* Produces clean, retrieval-ready text
+## Key Features
 
-### ✂️ Intelligent Chunking (RAG-Optimized)
+- Robust PDF ingestion with metadata preservation
+- Semantic chunking optimized for retrieval
+- Vector-based similarity search with configurable top-k
+- Grounded answer generation with source citations
+- Hallucination detection and quality safeguards
+- Retrieval and answer evaluation pipelines
+- Performance monitoring with latency tracking
+- RESTful API for integration
+- Interactive web interface
 
-* Recursive chunking strategy
-* Configurable:
+## How to Run
 
-  * Chunk size
-  * Overlap
-* Ensures semantic coherence across chunks
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-### 🏷️ Metadata Preservation
+# Run FastAPI backend
+uvicorn app.main:app --reload
 
-Each chunk is enriched with:
+# Run Streamlit UI (separate terminal)
+streamlit run ui/streamlit_app.py
 
-* Source document name
-* Page number(s)
-* Chunk index
-
-This metadata is essential for:
-
-* Future citation generation
-* Compliance audits
-* Explainable AI outputs
-
----
-
-## 🏗️ Current System Architecture
-
-```
-PDF Documents
-      │
-      ▼
-PDF Loader
-      │
-      ▼
-Text Cleaning & Normalization
-      │
-      ▼
-Recursive Chunking Engine
-      │
-      ▼
-Structured Text Chunks + Metadata
+# Run tests
+pytest tests/
 ```
 
-The output of this pipeline is **vector-store ready** and designed for seamless integration with embedding models and retrieval engines.
+**API Endpoints**
 
----
+- `POST /api/upload` - Upload and index PDF documents
+- `POST /api/query` - Query indexed documents
+- `GET /api/health` - Health check
 
-## 📁 Repository Structure
+## Project Structure
 
-```text
-enterprise-policy-rag/
-│
-├── app/
-│   ├── ingestion/
-│   │   ├── pdf_loader.py      # PDF parsing & text extraction
-│   │   ├── chunker.py         # Recursive chunking logic
-│   │   └── __init__.py
-│   │
-│   ├── core/
-│   │   ├── config.py          # Centralized configuration
-│   │   ├── logger.py          # Logging setup
-│   │   └── constants.py
-│   │
-│   └── main.py
-│
-├── data/
-│   ├── raw_pdfs/              # Original enterprise PDFs
-│   └── processed/             # Cleaned & chunked outputs
-│
-├── tests/
-│   └── test_ingestion.py      # Unit tests for ingestion pipeline
-│
-├── requirements.txt
-├── README.md
-└── .gitignore
+```
+app/
+├── ingestion/      # PDF loading, chunking, embeddings
+├── retrieval/      # Vector store, retrieval, RAG pipeline
+├── generation/     # LLM integration, prompts, hallucination detection
+├── evaluation/     # Retrieval and answer quality metrics
+├── api/            # FastAPI endpoints
+└── core/           # Config, logging, monitoring, exceptions
+
+ui/
+└── streamlit_app.py   # Interactive web interface
+
+tests/
+└── test_*.py          # Unit and integration tests
 ```
 
----
+## What This Project Demonstrates
 
-## 🛠️ Tech Stack
+**Machine Learning & AI**
 
-| Layer         | Technology                   |
-| ------------- | ---------------------------- |
-| Language      | Python 3.10                  |
-| PDF Parsing   | PyMuPDF / pdfplumber         |
-| Chunking      | Recursive Character Splitter |
-| Configuration | Pydantic                     |
-| Logging       | Python logging               |
-| Testing       | Pytest                       |
+- End-to-end RAG system design and implementation
+- Semantic search with vector databases
+- LLM integration with prompt engineering
+- Hallucination detection techniques
 
----
+**Software Engineering**
 
-## 🧠 Design Rationale
+- Clean architecture with separation of concerns
+- RESTful API design
+- Error handling and custom exceptions
+- Production logging and monitoring
+- Type safety with Pydantic
 
-### Why Focus Heavily on Ingestion?
+**Data Engineering**
 
-In production RAG systems:
+- Document processing pipelines
+- Text chunking strategies
+- Embedding generation and indexing
+- Metadata management for traceability
 
-* **70–80% of failures originate from bad document preprocessing**
-* Poor chunking leads to hallucinations and irrelevant answers
-* Metadata loss breaks citation and compliance guarantees
+**MLOps & Testing**
 
-This project prioritizes **data quality and traceability** over premature model integration.
-
-### Why Recursive Chunking?
-
-* Preserves semantic meaning
-* Avoids sentence truncation
-* Produces retrieval-friendly chunk boundaries
-
----
-
-## 🧪 Quality Assurance
-
-* Unit tests validating:
-
-  * PDF parsing correctness
-  * Chunk size constraints
-  * Metadata consistency
-* Manual inspection of chunk distributions
-* Deterministic preprocessing for reproducibility
-
-
-## 🔜 Planned Extensions
-
-* Sentence Transformer embeddings
-* Vector database integration (FAISS / ChromaDB)
-* Semantic retrieval
-* LLM-based answer generation with citations
-* API and web-based interface
-* Cloud deployment
-
----
-
-##  License
-
-MIT License
+- Automated evaluation pipelines
+- Retrieval and generation quality metrics
+- Performance monitoring and latency tracking
+- Unit testing for critical components
