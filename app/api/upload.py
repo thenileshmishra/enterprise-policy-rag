@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File
 from app.core.logger import logger
 from app.core.exception import CustomException
 from app.ingestion.pdf_loader import load_pdf
@@ -12,11 +12,13 @@ embedder = Embedder()
 
 
 @router.post("/upload")
-async def upload_pdf(file_bytes: bytes):
+async def upload_pdf(file: UploadFile = File(...)):
     try:
         logger.info("Received file upload")
 
-        # Save the uploaded bytes to a temporary PDF file and process it
+        # Read uploaded file bytes and save to a temporary PDF file
+        file_bytes = await file.read()
+
         import tempfile
         import os
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:

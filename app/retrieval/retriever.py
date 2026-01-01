@@ -22,5 +22,17 @@ class Retriever:
 
 
 def retrieve_topk(query: str, top_k: int = 5):
-    """Module-level helper used by the API to return top-k chunks for a query."""
-    return Retriever().retrive(query, top_k=top_k)
+    """Module-level helper used by the API to return top-k chunks for a query.
+    Converts low-level (metadata, score) tuples from the vector store into a list of
+    dictionaries expected by the RAG pipeline: [{'text': ..., 'metadata': {...}, 'score': ...}, ...]
+    """
+    raw = Retriever().retrive(query, top_k=top_k)
+    result = []
+    for meta, score in raw:
+        result.append({
+            "text": meta.get("text", ""),
+            "metadata": meta,
+            "score": score,
+        })
+
+    return result

@@ -1,4 +1,4 @@
-from app.evaluation.retrieval_eval import *
+from app.evaluation.retrieval_eval import precision_at_k, recall_at_k, mrr, ndcg_at_k
 from app.evaluation.answer_eval import faithfulness_score
 
 
