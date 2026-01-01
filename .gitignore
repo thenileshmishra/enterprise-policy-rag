@@ -211,3 +211,4 @@ __pycache__/
 .env
 .vscode/
 .cache/
+logs/*.csv
