@@ -1,4 +1,3 @@
-import pytest
 from app.generation.prompt import build_rag_prompt
 from app.generation.hallucination import hallucination_score
 

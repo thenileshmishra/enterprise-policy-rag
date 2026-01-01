@@ -29,6 +29,6 @@ def hallucination_score(answer: str, contexts: List[str]) -> float:
         score = util.cos_sim(answer_emb, ctx_emb).max().item()
         return round(float(score), 4)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Hallucination scoring failed")
         return 0.0

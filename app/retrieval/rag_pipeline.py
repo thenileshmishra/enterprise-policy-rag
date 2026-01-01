@@ -3,7 +3,6 @@ from app.generation.prompt import build_rag_prompt
 from app.generation.llm import LLMClient
 from app.generation.hallucination import hallucination_score
 from app.core.logger import logger
-from app.core.exception import CustomException
 
 
 llm = LLMClient()
