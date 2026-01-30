@@ -1,151 +1,240 @@
-# Enterprise Policy RAG
+# Research Paper RAG Assistant
 
-Production-grade Retrieval-Augmented Generation system for enterprise policy documents with evaluation and monitoring.
+A **NotebookLLM-style** application that lets you chat with your research papers. Upload PDFs, ask questions, and get accurate answers with citations.
 
-## Overview
+## What It Does
 
-Enterprise policies and compliance documents are difficult to search and reason over. This system enables natural language querying of policy documents using semantic search and LLM-powered answer generation with citations.
+1. **Upload PDFs** → System extracts text, splits into chunks, and indexes them
+2. **Ask Questions** → Finds relevant chunks using hybrid search (semantic + keyword)
+3. **Get Answers** → LLM generates responses grounded in your documents with citations
 
-Built with production-ready evaluation metrics, hallucination detection, and performance monitoring to ensure reliable, grounded responses for compliance-critical use cases.
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              STREAMLIT UI                                    │
+│                    (Upload PDFs, Chat, View Citations)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              FASTAPI BACKEND                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │   INGESTION  │    │  RETRIEVAL   │    │  GENERATION  │                   │
+│  ├──────────────┤    ├──────────────┤    ├──────────────┤                   │
+│  │ • PDF Parse  │    │ • Dense      │    │ • Llama LLM  │                   │
+│  │ • Chunking   │───▶│   (FAISS)    │───▶│ • Citations  │                   │
+│  │ • Embeddings │    │ • Sparse     │    │ • Grounding  │                   │
+│  │ • Metadata   │    │   (BM25)     │    │   Check      │                   │
+│  └──────────────┘    │ • Reranking  │    └──────────────┘                   │
+│                      └──────────────┘                                        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    ▼                 ▼                 ▼
+             ┌───────────┐     ┌───────────┐     ┌───────────┐
+             │   AWS S3  │     │  FAISS    │     │  MLflow   │
+             │  (PDFs)   │     │  (Index)  │     │  (Metrics)│
+             └───────────┘     └───────────┘     └───────────┘
+```
 
 ## Tech Stack
 
-**Backend & API**
-
-- FastAPI for REST endpoints
-- Python 3.11+ with Pydantic for type safety
-
-**RAG Pipeline**
-
-- PyMuPDF for PDF parsing and text extraction
-- LangChain for text splitting and chunking
-- Sentence Transformers for embeddings
-- FAISS and ChromaDB for vector storage
-- LLM integration for answer generation
-
-**Evaluation & Monitoring**
-
-- Custom retrieval evaluation metrics
-- Answer quality assessment
-- Hallucination detection
-- Latency tracking and performance monitoring
-
-**Frontend & Deployment**
-
-- Streamlit UI for document upload and querying
-- Loguru for structured logging
-- Pytest for testing
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Streamlit |
+| **Backend** | FastAPI, Python 3.11+ |
+| **PDF Parsing** | Unstructured, PyMuPDF |
+| **Embeddings** | Sentence Transformers (all-MiniLM-L6-v2) |
+| **Vector Store** | FAISS |
+| **Sparse Search** | BM25 (rank-bm25) |
+| **Reranking** | Cross-Encoder (ms-marco-MiniLM) |
+| **LLM** | Llama 3.3 70B via Groq / AWS SageMaker |
+| **Grounding** | NLI Model (DeBERTa) |
+| **Storage** | AWS S3 |
+| **Evaluation** | RAGAS, MLflow |
+| **Agents** | AutoGen |
 
 ## Key Features
 
-- Robust PDF ingestion with metadata preservation
-- Semantic chunking optimized for retrieval
-- Vector-based similarity search with configurable top-k
-- Grounded answer generation with source citations
-- Hallucination detection and quality safeguards
-- Retrieval and answer evaluation pipelines
-- Performance monitoring with latency tracking
-- RESTful API for integration
-- Interactive web interface
+### Ingestion
+- **Smart Chunking**: Uses Unstructured library to preserve document structure
+- **Rich Metadata**: Extracts page numbers, sections, and headings
+- **S3 Storage**: Uploaded PDFs stored in AWS S3
 
-## How to Run
+### Retrieval
+- **Hybrid Search**: Combines semantic (FAISS) + keyword (BM25) search
+- **Reranking**: Cross-encoder reranks results for better accuracy
+- **Lost-in-Middle**: Reorders context to prevent attention decay
+
+### Generation
+- **Grounded Answers**: NLI model verifies claims against source text
+- **Citations**: Every answer includes source references with page numbers
+- **Faithfulness Score**: Shows how well the answer is supported
+
+### Evaluation (RAGAS Metrics)
+- **Faithfulness**: Is the answer supported by the context?
+- **Answer Relevance**: Does the answer address the question?
+- **Context Precision**: Are retrieved chunks relevant?
+- **Context Recall**: Are all needed chunks retrieved?
+
+## Quick Start
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# Run FastAPI backend
+# 2. Set environment variables
+cp .env.example .env
+# Edit .env with your API keys
+
+# 3. Run the backend
 uvicorn app.main:app --reload
 
-# Run Streamlit UI (separate terminal)
+# 4. Run the UI (new terminal)
 streamlit run ui/streamlit_app.py
-
-# Run tests
-pytest tests/
 ```
 
-## Docker
-
-Build and run locally with Docker:
+## Environment Variables
 
 ```bash
-# build
-docker build -t enterprise-policy-rag:local .
-# run
-docker run -p 8000:8000 -e HF_API_KEY=your_hf_key -v $(pwd)/data/processed:/data/processed enterprise-policy-rag:local
+# Required
+LLM_API_KEY=your_groq_api_key
+LLM_API_URL=https://api.groq.com/openai/v1/chat/completions
+
+# Optional - AWS
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
+S3_BUCKET=your-bucket-name
+
+# Optional - SageMaker
+SAGEMAKER_ENDPOINT_NAME=your-llama-endpoint
 ```
 
-## Deploy to Render
+## API Endpoints
 
-Add the following GitHub secrets:
-- `RENDER_API_KEY` (Render service API key)
-- `RENDER_SERVICE_ID` (Render service ID)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/upload` | Upload and index a PDF |
+| POST | `/api/query` | Ask a question |
+| GET | `/api/sessions` | List active sessions |
+| DELETE | `/api/session/{id}` | Delete a session |
+| GET | `/api/health` | Health check |
 
-You can either let GitHub Actions push the image to GHCR and trigger a Render deploy (configured in `.github/workflows/ci-cd.yml`), or connect Render directly to the GitHub repo and use the provided `.render.yaml` configuration.
+### Example Query
 
-## FAISS index persistence
+```bash
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the main findings?",
+    "session_id": "your-session-id",
+    "use_hybrid": true,
+    "use_reranking": true
+  }'
+```
 
-You can persist the FAISS index in one of two ways:
-
-1. Use Render / provider persistent disk (if available) and mount `/data/processed` as a volume.
-2. Use S3/DigitalOcean Spaces by setting:
-
-- `S3_BUCKET`, `S3_INDEX_KEY`, `S3_META_KEY`
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `S3_ENDPOINT` (for Spaces)
-
-On startup the app will try to download the index from S3 if `S3_BUCKET` is configured; otherwise it will use local `/data/processed/faiss.index`.
-
-**API Endpoints**
-
-- `POST /api/upload` - Upload and index PDF documents
-- `POST /api/query` - Query indexed documents
-- `GET /api/health` - Health check
+Response includes:
+- `answer`: Generated response
+- `citations`: List of sources with page numbers
+- `confidence`: Overall confidence score
+- `faithfulness_score`: How grounded the answer is
 
 ## Project Structure
 
 ```
 app/
-├── ingestion/      # PDF loading, chunking, embeddings
-├── retrieval/      # Vector store, retrieval, RAG pipeline
-├── generation/     # LLM integration, prompts, hallucination detection
-├── evaluation/     # Retrieval and answer quality metrics
-├── api/            # FastAPI endpoints
-└── core/           # Config, logging, monitoring, exceptions
+├── ingestion/          # PDF loading, chunking, embeddings
+│   ├── pdf_loader.py   # PyMuPDF + structure detection
+│   ├── chunker.py      # Unstructured-based chunking
+│   └── embedder.py     # Sentence Transformers
+│
+├── retrieval/          # Search and retrieval
+│   ├── vector_store.py # FAISS index
+│   ├── sparse_retriever.py  # BM25
+│   ├── hybrid_retriever.py  # Dense + Sparse fusion
+│   ├── reranker.py     # Cross-encoder reranking
+│   └── session_store.py     # Session-based indexes
+│
+├── generation/         # LLM and response generation
+│   ├── llm.py          # Groq/SageMaker client
+│   ├── prompt.py       # Prompt templates
+│   ├── hallucination.py     # NLI grounding check
+│   └── citation.py     # Citation extraction
+│
+├── evaluation/         # Quality metrics
+│   ├── ragas_eval.py   # RAGAS metrics
+│   ├── mlflow_tracker.py    # Experiment tracking
+│   └── synthetic_qa.py # Test data generation
+│
+├── agents/             # AutoGen orchestration
+│   ├── rag_agent.py    # Main orchestrator
+│   ├── retrieval_agent.py
+│   └── grounding_agent.py
+│
+├── api/                # FastAPI routes
+│   ├── upload.py
+│   └── query.py
+│
+└── core/               # Config and utilities
+    ├── config.py
+    ├── logger.py
+    └── monitor.py
 
 ui/
-└── streamlit_app.py   # Interactive web interface
-
-tests/
-└── test_*.py          # Unit and integration tests
+└── streamlit_app.py    # Chat interface
 ```
 
-## What This Project Demonstrates
+## How It Works (Simple Explanation)
 
-**Machine Learning & AI**
+### 1. Upload Phase
+```
+PDF → Extract Text → Split into Chunks → Create Embeddings → Store in FAISS
+```
+- Each chunk keeps track of which page and section it came from
 
-- End-to-end RAG system design and implementation
-- Semantic search with vector databases
-- LLM integration with prompt engineering
-- Hallucination detection techniques
+### 2. Query Phase
+```
+Question → Find Similar Chunks → Rerank → Build Prompt → Generate Answer → Verify
+```
+- **Hybrid Search**: Finds chunks that are semantically similar AND contain matching keywords
+- **Reranking**: Uses a smarter model to pick the best chunks
+- **Verification**: Checks if the answer is actually supported by the chunks
 
-**Software Engineering**
+### 3. Session Management
+- Each browser session gets its own vector index
+- Upload multiple PDFs to the same session
+- Ask questions across all your uploaded documents
 
-- Clean architecture with separation of concerns
-- RESTful API design
-- Error handling and custom exceptions
-- Production logging and monitoring
-- Type safety with Pydantic
+## Docker
 
-**Data Engineering**
+```bash
+# Build
+docker build -t research-rag:latest .
 
-- Document processing pipelines
-- Text chunking strategies
-- Embedding generation and indexing
-- Metadata management for traceability
+# Run
+docker run -p 8000:8000 \
+  -e LLM_API_KEY=your_key \
+  research-rag:latest
+```
 
-**MLOps & Testing**
+## Evaluation
 
-- Automated evaluation pipelines
-- Retrieval and generation quality metrics
-- Performance monitoring and latency tracking
-- Unit testing for critical components
+Run RAGAS evaluation on a test dataset:
+
+```bash
+python -m app.evaluation.ragas_eval --dataset data/eval/test_qa.json
+```
+
+View results in MLflow:
+```bash
+mlflow ui
+# Open http://localhost:5000
+```
+
+## License
+
+MIT
