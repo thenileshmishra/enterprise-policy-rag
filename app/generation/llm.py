@@ -29,20 +29,38 @@ class LLMClient:
             logger.warning("No LLM API key configured; LLMClient will be inactive")
 
     def generate(self, prompt: str, max_tokens: int = 512) -> str:
-        try:
-            if not self.api_key:
-                raise CustomException("No LLM API key configured")
+        if not self.api_key:
+            return self._local_fallback_answer(prompt)
 
+        try:
             if self.provider == "openai":
                 return self._generate_openai(prompt, max_tokens)
-            elif self.provider == "huggingface":
+            if self.provider == "huggingface":
                 return self._generate_huggingface(prompt, max_tokens)
-            else:
-                raise CustomException("Unknown LLM provider")
-
+            return self._local_fallback_answer(prompt)
         except Exception as e:
-            logger.exception("LLM generation failed")
-            raise CustomException(e)
+            logger.warning(f"Remote LLM failed, using local fallback: {e}")
+            return self._local_fallback_answer(prompt)
+
+    def _local_fallback_answer(self, prompt: str) -> str:
+        """Return a simple extractive answer for local/dev usage without API keys."""
+        marker = "CONTEXT DOCUMENTS:"
+        if marker not in prompt:
+            marker = "Context:"
+
+        if marker in prompt:
+            context_part = prompt.split(marker, 1)[1]
+            lines = [line.strip() for line in context_part.splitlines() if line.strip()]
+            useful = [line for line in lines if not line.startswith("USER QUESTION:") and not line.startswith("ANSWER")]
+            snippet = " ".join(useful)[:600]
+            if snippet:
+                return (
+                    "Local fallback answer (no LLM API key configured). "
+                    "Most relevant content found: "
+                    f"{snippet}"
+                )
+
+        return "Local fallback answer (no LLM API key configured). Please set LLM_API_KEY and LLM_API_URL for full generation quality."
 
     def _generate_openai(self, prompt: str, max_tokens: int) -> str:
         """Generate using OpenAI-compatible API (Groq, OpenAI, etc.)"""

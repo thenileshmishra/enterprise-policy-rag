@@ -11,10 +11,7 @@ llm = LLMClient()
 def rag_answer(query: str, retrieved_chunks: list) -> Dict:
     """
     retrieved_chunks expected format:
-    [
-        {"text": "...", "metadata": {...}},
-        ...
-    ]
+    [{"text": "...", "source": "...", "page_number": 1, "score": 0.1}, ...]
     """
 
     if not retrieved_chunks:
@@ -33,8 +30,10 @@ def rag_answer(query: str, retrieved_chunks: list) -> Dict:
 
     confidence = hallucination_score(answer, contexts)
 
+    sources = sorted({c.get("source", "Unknown") for c in retrieved_chunks})
+
     return {
         "answer": answer,
         "confidence": confidence,
-        "sources": [c.get("metadata", {}) for c in retrieved_chunks]
+        "sources": sources,
     }

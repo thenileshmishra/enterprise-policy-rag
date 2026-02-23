@@ -19,3 +19,21 @@ class Embedder:
     
     def embed_single(self, text: str):
         return self.model.encode([text])[0].tolist()
+
+
+_embedder_instance: Embedder | None = None
+
+
+def get_embedder() -> Embedder:
+    global _embedder_instance
+    if _embedder_instance is None:
+        _embedder_instance = Embedder()
+    return _embedder_instance
+
+
+def get_embeddings(texts: List[str]) -> List[List[float]]:
+    return get_embedder().embed_texts(texts)
+
+
+def get_query_embedding(text: str) -> List[float]:
+    return get_embedder().embed_single(text)
