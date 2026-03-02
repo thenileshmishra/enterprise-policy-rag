@@ -1,240 +1,149 @@
-# Research Paper RAG Assistant
+# Advanced RAG Pipeline
 
-A **NotebookLLM-style** application that lets you chat with your research papers. Upload PDFs, ask questions, and get accurate answers with citations.
-
-## What It Does
-
-1. **Upload PDFs** → System extracts text, splits into chunks, and indexes them
-2. **Ask Questions** → Finds relevant chunks using hybrid search (semantic + keyword)
-3. **Get Answers** → LLM generates responses grounded in your documents with citations
+A production-style Retrieval-Augmented Generation system with hybrid retrieval, cross-encoder reranking, and NLI-based faithfulness detection. Built with FastAPI + Streamlit.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              STREAMLIT UI                                    │
-│                    (Upload PDFs, Chat, View Citations)                       │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              FASTAPI BACKEND                                 │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │   INGESTION  │    │  RETRIEVAL   │    │  GENERATION  │                   │
-│  ├──────────────┤    ├──────────────┤    ├──────────────┤                   │
-│  │ • PDF Parse  │    │ • Dense      │    │ • Llama LLM  │                   │
-│  │ • Chunking   │───▶│   (FAISS)    │───▶│ • Citations  │                   │
-│  │ • Embeddings │    │ • Sparse     │    │ • Grounding  │                   │
-│  │ • Metadata   │    │   (BM25)     │    │   Check      │                   │
-│  └──────────────┘    │ • Reranking  │    └──────────────┘                   │
-│                      └──────────────┘                                        │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                    ┌─────────────────┼─────────────────┐
-                    ▼                 ▼                 ▼
-             ┌───────────┐     ┌───────────┐     ┌───────────┐
-             │   AWS S3  │     │  FAISS    │     │  MLflow   │
-             │  (PDFs)   │     │  (Index)  │     │  (Metrics)│
-             └───────────┘     └───────────┘     └───────────┘
+Query ──► Embedding ──► FAISS (Dense)  ──┐
+     │                                    ├──► RRF Fusion ──► Cross-Encoder Rerank ──► LLM Generation
+     └──────────────► BM25 (Sparse)  ──┘                                                    │
+                                                                                             ▼
+                                                                              NLI Faithfulness Check
+                                                                              (is_grounded + score)
 ```
 
-## Tech Stack
+**Retrieval Pipeline:**
+1. **Dense retrieval** — FAISS IndexFlatL2 with `all-MiniLM-L6-v2` embeddings (384-dim)
+2. **Sparse retrieval** — BM25 (rank-bm25) for keyword matching
+3. **Hybrid fusion** — Reciprocal Rank Fusion (RRF) combines both: `score += 1/(k + rank)`
+4. **Cross-encoder reranking** — `ms-marco-MiniLM-L-6-v2` rescores top candidates
+5. **Lost-in-the-middle reordering** — places best chunks at start/end of context window
+6. **NLI faithfulness** — `nli-deberta-v3-small` checks entailment between answer and context
 
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | Streamlit |
-| **Backend** | FastAPI, Python 3.11+ |
-| **PDF Parsing** | Unstructured, PyMuPDF |
-| **Embeddings** | Sentence Transformers (all-MiniLM-L6-v2) |
-| **Vector Store** | FAISS |
-| **Sparse Search** | BM25 (rank-bm25) |
-| **Reranking** | Cross-Encoder (ms-marco-MiniLM) |
-| **LLM** | Llama 3.3 70B via Groq / AWS SageMaker |
-| **Grounding** | NLI Model (DeBERTa) |
-| **Storage** | AWS S3 |
-| **Evaluation** | RAGAS, MLflow |
-| **Agents** | AutoGen |
+## Project Structure
 
-## Key Features
+```text
+app/
+  api/
+    health.py            # Health check
+    upload.py            # PDF upload (multi-doc sessions)
+    query.py             # Query with mode selection
+  core/
+    config.py            # Environment settings
+    exception.py         # Custom exceptions
+    logger.py            # Loguru logging
+    monitor.py           # Latency tracking
+  ingestion/
+    pdf_loader.py        # PyMuPDF PDF extraction
+    chunker.py           # Recursive text splitting
+    embedder.py          # SentenceTransformer embeddings
+  retrieval/
+    vector_store.py      # FAISS index
+    sparse_retriever.py  # BM25 index
+    hybrid_retriever.py  # RRF fusion
+    reranker.py          # Cross-encoder reranker
+    session_store.py     # Multi-document sessions
+    rag_pipeline.py      # End-to-end RAG orchestration
+  generation/
+    prompt.py            # Prompt builder + lost-in-middle reorder
+    llm.py               # LLM client (Groq/HuggingFace/fallback)
+    hallucination.py     # NLI + similarity faithfulness scoring
+ui/
+  streamlit_app.py       # Interactive web UI
+```
 
-### Ingestion
-- **Smart Chunking**: Uses Unstructured library to preserve document structure
-- **Rich Metadata**: Extracts page numbers, sections, and headings
-- **S3 Storage**: Uploaded PDFs stored in AWS S3
-
-### Retrieval
-- **Hybrid Search**: Combines semantic (FAISS) + keyword (BM25) search
-- **Reranking**: Cross-encoder reranks results for better accuracy
-- **Lost-in-Middle**: Reorders context to prevent attention decay
-
-### Generation
-- **Grounded Answers**: NLI model verifies claims against source text
-- **Citations**: Every answer includes source references with page numbers
-- **Faithfulness Score**: Shows how well the answer is supported
-
-### Evaluation (RAGAS Metrics)
-- **Faithfulness**: Is the answer supported by the context?
-- **Answer Relevance**: Does the answer address the question?
-- **Context Precision**: Are retrieved chunks relevant?
-- **Context Recall**: Are all needed chunks retrieved?
-
-## Quick Start
+## Setup
 
 ```bash
-# 1. Install dependencies
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 2. Set environment variables
-cp .env.example .env
-# Edit .env with your API keys
-
-# 3. Run the backend
-uvicorn app.main:app --reload
-
-# 4. Run the UI (new terminal)
-streamlit run ui/streamlit_app.py
 ```
 
 ## Environment Variables
 
+Create a `.env` file:
+
 ```bash
-# Required
-LLM_API_KEY=your_groq_api_key
+LLM_API_KEY=your_groq_key
 LLM_API_URL=https://api.groq.com/openai/v1/chat/completions
-
-# Optional - AWS
-AWS_ACCESS_KEY_ID=your_aws_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret
-S3_BUCKET=your-bucket-name
-
-# Optional - SageMaker
-SAGEMAKER_ENDPOINT_NAME=your-llama-endpoint
 ```
+
+Without API keys, the app uses a local extractive fallback.
+
+## Run
+
+**Backend:**
+```bash
+uvicorn app.main:app --reload
+```
+
+**UI (separate terminal):**
+```bash
+streamlit run ui/streamlit_app.py
+```
+
+- API docs: http://127.0.0.1:8000/docs
+- Streamlit UI: http://localhost:8501
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/upload` | Upload and index a PDF |
-| POST | `/api/query` | Ask a question |
-| GET | `/api/sessions` | List active sessions |
-| DELETE | `/api/session/{id}` | Delete a session |
-| GET | `/api/health` | Health check |
+### POST `/api/upload`
+Upload a PDF to a session. Returns `session_id` for subsequent queries.
 
-### Example Query
-
-```bash
-curl -X POST http://localhost:8000/api/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What are the main findings?",
-    "session_id": "your-session-id",
-    "use_hybrid": true,
-    "use_reranking": true
-  }'
+```json
+// Form data: file (PDF) + optional session_id
+// Response:
+{
+  "session_id": "abc12345",
+  "chunks_indexed": 42,
+  "document_name": "report.pdf",
+  "total_documents": 1
+}
 ```
 
-Response includes:
-- `answer`: Generated response
-- `citations`: List of sources with page numbers
-- `confidence`: Overall confidence score
-- `faithfulness_score`: How grounded the answer is
+### POST `/api/query`
+Query documents with configurable retrieval.
 
-## Project Structure
+```json
+// Request:
+{
+  "query": "What is the refund policy?",
+  "session_id": "abc12345",
+  "mode": "hybrid",
+  "use_reranking": true,
+  "top_k": 5
+}
 
-```
-app/
-├── ingestion/          # PDF loading, chunking, embeddings
-│   ├── pdf_loader.py   # PyMuPDF + structure detection
-│   ├── chunker.py      # Unstructured-based chunking
-│   └── embedder.py     # Sentence Transformers
-│
-├── retrieval/          # Search and retrieval
-│   ├── vector_store.py # FAISS index
-│   ├── sparse_retriever.py  # BM25
-│   ├── hybrid_retriever.py  # Dense + Sparse fusion
-│   ├── reranker.py     # Cross-encoder reranking
-│   └── session_store.py     # Session-based indexes
-│
-├── generation/         # LLM and response generation
-│   ├── llm.py          # Groq/SageMaker client
-│   ├── prompt.py       # Prompt templates
-│   ├── hallucination.py     # NLI grounding check
-│   └── citation.py     # Citation extraction
-│
-├── evaluation/         # Quality metrics
-│   ├── ragas_eval.py   # RAGAS metrics
-│   ├── mlflow_tracker.py    # Experiment tracking
-│   └── synthetic_qa.py # Test data generation
-│
-├── agents/             # AutoGen orchestration
-│   ├── rag_agent.py    # Main orchestrator
-│   ├── retrieval_agent.py
-│   └── grounding_agent.py
-│
-├── api/                # FastAPI routes
-│   ├── upload.py
-│   └── query.py
-│
-└── core/               # Config and utilities
-    ├── config.py
-    ├── logger.py
-    └── monitor.py
-
-ui/
-└── streamlit_app.py    # Chat interface
+// Response:
+{
+  "answer": "The refund policy states...",
+  "confidence": 0.82,
+  "is_grounded": true,
+  "faithfulness_score": 0.82,
+  "retrieval_method": "hybrid+rerank",
+  "sources": ["report.pdf"]
+}
 ```
 
-## How It Works (Simple Explanation)
+**Retrieval modes:** `dense` | `sparse` | `hybrid`
 
-### 1. Upload Phase
-```
-PDF → Extract Text → Split into Chunks → Create Embeddings → Store in FAISS
-```
-- Each chunk keeps track of which page and section it came from
+## Why These Choices
 
-### 2. Query Phase
-```
-Question → Find Similar Chunks → Rerank → Build Prompt → Generate Answer → Verify
-```
-- **Hybrid Search**: Finds chunks that are semantically similar AND contain matching keywords
-- **Reranking**: Uses a smarter model to pick the best chunks
-- **Verification**: Checks if the answer is actually supported by the chunks
+| Component | Choice | Reason |
+|-----------|--------|--------|
+| Dense retrieval | FAISS + MiniLM | Fast semantic search, small model footprint |
+| Sparse retrieval | BM25 | Captures exact keyword matches that embeddings miss |
+| Fusion | RRF (k=60) | Robust rank-based fusion, no score calibration needed |
+| Reranker | ms-marco cross-encoder | Joint query-doc scoring for precise relevance |
+| Faithfulness | NLI (DeBERTa) | Detects contradictions that similarity alone misses |
+| Context order | Lost-in-middle | LLMs attend less to middle positions |
 
-### 3. Session Management
-- Each browser session gets its own vector index
-- Upload multiple PDFs to the same session
-- Ask questions across all your uploaded documents
+## Demo Flow
 
-## Docker
-
-```bash
-# Build
-docker build -t research-rag:latest .
-
-# Run
-docker run -p 8000:8000 \
-  -e LLM_API_KEY=your_key \
-  research-rag:latest
-```
-
-## Evaluation
-
-Run RAGAS evaluation on a test dataset:
-
-```bash
-python -m app.evaluation.ragas_eval --dataset data/eval/test_qa.json
-```
-
-View results in MLflow:
-```bash
-mlflow ui
-# Open http://localhost:5000
-```
-
-## License
-
-MIT
+1. Start backend + UI
+2. Upload 2 PDFs (creates a session)
+3. Query in `dense`, then `hybrid`, then `hybrid+rerank`
+4. Compare faithfulness scores and source quality
+5. Toggle reranking to see relevance improvement
