@@ -1,7 +1,4 @@
-"""
-LLM Inference Wrapper
-Uses HuggingFace Inference API or OpenAI-compatible APIs (Groq, etc.)
-"""
+"""LLM client using OpenAI-compatible APIs (Groq, OpenAI, etc.)."""
 
 import requests
 from app.core.logger import logger
@@ -11,103 +8,52 @@ from app.core.config import settings
 
 class LLMClient:
     def __init__(self):
-        """Initialize client with priority: LLM_API_KEY > HF_API_KEY"""
-        # Prefer custom LLM API (Groq) over HuggingFace
         if settings.LLM_API_KEY and settings.LLM_API_URL:
             self.api_url = settings.LLM_API_URL
             self.api_key = settings.LLM_API_KEY
-            self.provider = "openai"  # Groq uses OpenAI-compatible API
             logger.info(f"LLM client configured with URL: {self.api_url}")
-        elif settings.HF_API_KEY:
-            self.api_url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
-            self.api_key = settings.HF_API_KEY
-            self.provider = "huggingface"
-            logger.info("LLM client configured with HuggingFace")
         else:
             self.api_key = None
-            self.provider = None
-            logger.warning("No LLM API key configured; LLMClient will be inactive")
+            self.api_url = None
+            logger.warning("No LLM API key configured; using local fallback")
 
     def generate(self, prompt: str, max_tokens: int = 512) -> str:
         if not self.api_key:
             return self._local_fallback_answer(prompt)
 
         try:
-            if self.provider == "openai":
-                return self._generate_openai(prompt, max_tokens)
-            if self.provider == "huggingface":
-                return self._generate_huggingface(prompt, max_tokens)
-            return self._local_fallback_answer(prompt)
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": settings.LLM_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": settings.LLM_TEMPERATURE,
+            }
+
+            res = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
+
+            if res.status_code != 200:
+                logger.error(f"LLM API failed: {res.text}")
+                raise CustomException(f"LLM Inference Error {res.status_code}")
+
+            return res.json()["choices"][0]["message"]["content"].strip()
+
         except Exception as e:
             logger.warning(f"Remote LLM failed, using local fallback: {e}")
             return self._local_fallback_answer(prompt)
 
     def _local_fallback_answer(self, prompt: str) -> str:
-        """Return a simple extractive answer for local/dev usage without API keys."""
-        marker = "CONTEXT DOCUMENTS:"
-        if marker not in prompt:
-            marker = "Context:"
-
+        """Extractive fallback when no API key is configured."""
+        marker = "Context:"
         if marker in prompt:
             context_part = prompt.split(marker, 1)[1]
-            lines = [line.strip() for line in context_part.splitlines() if line.strip()]
-            useful = [line for line in lines if not line.startswith("USER QUESTION:") and not line.startswith("ANSWER")]
+            lines = [l.strip() for l in context_part.splitlines() if l.strip()]
+            useful = [l for l in lines if not l.startswith("User Question:") and not l.startswith("Answer:")]
             snippet = " ".join(useful)[:600]
             if snippet:
-                return (
-                    "Local fallback answer (no LLM API key configured). "
-                    "Most relevant content found: "
-                    f"{snippet}"
-                )
+                return f"Local fallback (no LLM API key). Relevant content: {snippet}"
 
-        return "Local fallback answer (no LLM API key configured). Please set LLM_API_KEY and LLM_API_URL for full generation quality."
-
-    def _generate_openai(self, prompt: str, max_tokens: int) -> str:
-        """Generate using OpenAI-compatible API (Groq, OpenAI, etc.)"""
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": "llama-3.3-70b-versatile",  # Groq's fast model
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": max_tokens,
-            "temperature": 0.2,
-        }
-
-        res = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
-
-        if res.status_code != 200:
-            logger.error(f"OpenAI-compatible API failed: {res.text}")
-            raise CustomException(f"LLM Inference Error {res.status_code}")
-
-        output = res.json()
-        return output["choices"][0]["message"]["content"].strip()
-
-    def _generate_huggingface(self, prompt: str, max_tokens: int) -> str:
-        """Generate using HuggingFace Inference API"""
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": max_tokens,
-                "temperature": 0.2,
-            }
-        }
-
-        res = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
-
-        if res.status_code != 200:
-            logger.error(f"HF Inference failed: {res.text}")
-            raise CustomException(f"LLM Inference Error {res.status_code}")
-
-        output = res.json()
-
-        if isinstance(output, list):
-            return output[0].get("generated_text", "").strip()
-
-        return output.get("generated_text", "").strip()
+        return "Local fallback (no LLM API key). Set LLM_API_KEY and LLM_API_URL in .env for full answers."
